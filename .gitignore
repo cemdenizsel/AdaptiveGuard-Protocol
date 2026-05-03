@@ -1,0 +1,50 @@
+# ── LaTeX build artifacts (keep paper_draft.pdf) ─────────────────────────────
+*.aux
+*.log
+*.out
+*.tex
+
+# ── Research / analysis artifacts ────────────────────────────────────────────
+comparison_report.md
+execution_plan.json
+test_results.json
+figures/
+code/
+
+# ── Hackathon brief (internal) ────────────────────────────────────────────────
+mezo_hackathon_project_brief.md
+
+# ── Environment / secrets ─────────────────────────────────────────────────────
+.env
+.env.local
+*.env.local
+
+# ── Foundry ───────────────────────────────────────────────────────────────────
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/.DS_Store
+
+# ── Node / frontend ──────────────────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.DS_Store
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
