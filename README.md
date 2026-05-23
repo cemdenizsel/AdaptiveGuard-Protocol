@@ -53,7 +53,7 @@ Composite adjustments on top:
 - **Stability Pool depth** < 10% → +5pp; < 20% → +2pp
 - **TCR near CCR (150%)** → up to +10pp
 - **Rate limiter**: ±5pp per epoch, 4h cooldown between decreases
-- **Circuit breaker**: >10% price drop in 12h → freeze MCR for 48h
+- **Circuit breaker**: >15% price drop in 12h → freeze MCR for 48h
 
 ---
 
@@ -63,6 +63,7 @@ Composite adjustments on top:
 - [Foundry](https://book.getfoundry.sh/getting-started/installation)
 - Node 18+ / npm
 - Python 3.10+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
 
 ```bash
 # 1. Clone
@@ -74,10 +75,7 @@ cd contracts && forge install && cd ..
 # 3. Install frontend dependencies
 cd frontend && npm install && cd ..
 
-# 4. Install Python service dependencies
-pip install -r services/requirements.txt
-
-# 5. One-command local demo
+# 4. One-command local demo (uv handles Python deps automatically)
 ./scripts/run_local.sh
 ```
 
@@ -123,6 +121,9 @@ forge test --summary   # summary table
 ### Run EGARCH Service
 
 ```bash
+# Install Python dependencies
+uv sync
+
 # Set env vars first
 export ORACLE_ADDRESS=0x...
 export ENGINE_ADDRESS=0x...
@@ -130,10 +131,10 @@ export PRIVATE_KEY=0x...
 export RPC_URL=http://127.0.0.1:8545
 
 # Dry run (no transactions)
-python -m services.egarch_service.main --dry-run --once
+uv run python -m services.egarch_service.main --dry-run --once
 
 # Start scheduler (runs every hour)
-python -m services.egarch_service.main
+uv run python -m services.egarch_service.main
 ```
 
 ### Run Frontend
@@ -175,6 +176,6 @@ VolatilityOracleTest       17/17  ✓
 
 The volatility model and protocol design are documented in `paper_draft.pdf`.
 Key findings from the backtester:
-- During Black Thursday (−50% in 24h): MCR rose from 110% to ~140%, reducing cascade liquidations by ~60% vs static baseline
-- During May 2021 (−40% in 48h): Pre-buffer conditioning forced 23% of at-risk positions to top-up before the crash
-- During FTX collapse (−30% in 72h): Circuit breaker engaged, MCR frozen at 135% for 48h, preventing premature loosening
+- During Black Thursday (−51.6% drawdown): bad debt reduced 72.6%, cascade depth reduced 59.1% vs static baseline
+- During May 2021 (−48.0% drawdown): bad debt reduced 67.6%, cascade depth reduced 58.3%
+- During FTX collapse (−27.1% drawdown): bad debt eliminated entirely (100% reduction), cascade depth reduced 80.0%

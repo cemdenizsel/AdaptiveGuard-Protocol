@@ -229,8 +229,8 @@ contract AdaptiveMCREngineTest is Test {
         vm.warp(block.timestamp + 2 hours);
         engine.applyPendingProposal();
 
-        // Within 12h window, price drops >10%
-        // BTC_PRICE = 3000, new price = 2650 → drop = (3000-2650)/3000 = 11.7%
+        // Within 12h window, price drops >15%
+        // BTC_PRICE = 3000, new price = 2500 → drop = (3000-2500)/3000 = 16.7%
         vm.warp(block.timestamp + 4 hours);
         vm.prank(dao);
         oracle.submitVolatility(9000);
@@ -239,7 +239,7 @@ contract AdaptiveMCREngineTest is Test {
         // (the breaker fires inside the same call that detects the crash)
         vm.prank(proposer);
         vm.expectRevert("Engine: circuit breaker active");
-        engine.proposeMCRUpdate(SP_HEALTHY, TCR_HEALTHY, 2650);
+        engine.proposeMCRUpdate(SP_HEALTHY, TCR_HEALTHY, 2500);
     }
 
     function test_CircuitBreaker_ClearsAfterHoldPeriod() public {

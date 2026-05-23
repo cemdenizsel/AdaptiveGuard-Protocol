@@ -34,9 +34,9 @@ contract MezoIntegrationAdapter is AccessControl, Pausable, ReentrancyGuard {
     uint256 public constant PRECISION = 1e18;
 
     // ─── External Contracts ───────────────────────────────────────────────────
-    IAdaptiveMCR public mcrEngine;
-    IMezoCDP     public mezoCDP;        // address(0) when simulated
-    address      public btcPriceFeed;   // Chainlink BTC/USD
+    IAdaptiveMCR   public mcrEngine;
+    IMezoCDP       public mezoCDP;         // address(0) when simulated
+    IMezoPriceFeed public mezoPriceFeed;   // Mezo BTC/USD price feed (optional)
 
     bool public isSimulated;  // true = demo/testnet mode with local CDP tracking
 
@@ -160,7 +160,7 @@ contract MezoIntegrationAdapter is AccessControl, Pausable, ReentrancyGuard {
 
         tcrBPS      = tcr * 10000 / PRECISION;         // 1e18 → BPS
         spDepthBPS  = debt > 0 ? spBal * 10000 / debt : 10000;
-        btcPriceBPS = price * 100 / 1e8;               // Chainlink 8-dec → BPS-friendly
+        btcPriceBPS = price / 1e18;                    // 1e18 precision → raw USD integer
     }
 
     function _simulatedStats() internal view returns (uint256 tcrBPS, uint256 spDepthBPS, uint256 btcPriceBPS) {
@@ -176,7 +176,7 @@ contract MezoIntegrationAdapter is AccessControl, Pausable, ReentrancyGuard {
 
         tcrBPS      = tcr * 10000 / PRECISION;
         spDepthBPS  = simulatedSPBalance * 10000 / debt;
-        btcPriceBPS = simulatedBTCPrice * 100 / 1e18;
+        btcPriceBPS = simulatedBTCPrice / 1e18;        // 1e18 precision → raw USD integer
     }
 
     // ─── Simulated CDP Operations (demo / testnet) ────────────────────────────
@@ -325,6 +325,22 @@ contract MezoIntegrationAdapter is AccessControl, Pausable, ReentrancyGuard {
         emit PriceUpdated(price18);
     }
 
+    function setMezoPriceFeed(address _feed) external onlyRole(DAO_ROLE) {
+        mezoPriceFeed = IMezoPriceFeed(_feed);
+    }
+
+    /**
+     * @notice Pull the current BTC price from Mezo's PriceFeed and store it.
+     * Anyone can call this to keep simulatedBTCPrice fresh on testnet.
+     */
+    function updateBTCPrice() external {
+        require(address(mezoPriceFeed) != address(0), "Adapter: no price feed set");
+        uint256 newPrice = mezoPriceFeed.fetchPrice();
+        require(newPrice > 0, "Adapter: invalid price from feed");
+        simulatedBTCPrice = newPrice;
+        emit PriceUpdated(newPrice);
+    }
+
     // ─── View: all active trove owners ───────────────────────────────────────
 
     function getActiveTroveOwners() external view returns (address[] memory active) {
@@ -368,21 +384,16 @@ contract MezoIntegrationAdapter is AccessControl, Pausable, ReentrancyGuard {
             IMezoCDP.TroveData memory td = mezoCDP.getTrove(owner);
             if (td.status != 1) return (0, 0);
             uint256 price = _getPrice();
-            collUSD = td.collateral * price / 1e8; // Chainlink 8-dec
+            collUSD = td.collateral * price / 1e18; // Mezo 18-dec
             debtUSD = td.debt;
         }
     }
 
     function _getPrice() internal view returns (uint256) {
-        if (btcPriceFeed == address(0)) return simulatedBTCPrice;
-        (, int256 ans,,,) = IChainlinkFeedMinimal(btcPriceFeed).latestRoundData();
-        return uint256(ans);
+        return simulatedBTCPrice;  // updated via setSimulatedBTCPrice() or updateBTCPrice()
     }
 }
 
-interface IChainlinkFeedMinimal {
-    function latestRoundData()
-        external
-        view
-        returns (uint80, int256, uint256, uint256, uint80);
+interface IMezoPriceFeed {
+    function fetchPrice() external returns (uint256);
 }

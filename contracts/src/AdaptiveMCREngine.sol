@@ -26,7 +26,7 @@ import "./interfaces/IAdaptiveMCR.sol";
  * Rate limiting:
  *   - Max ±5pp change per epoch
  *   - 4-hour cooldown between successive MCR decreases
- *   - Circuit breaker: if BTC price drops >10% in 12h, MCR is frozen for 48h
+ *   - Circuit breaker: if BTC price drops >15% within 12h window, MCR is frozen for 48h
  *
  * Governance:
  *   - MCR bounds [110%, 160%] enforced as hard guardrails
@@ -47,7 +47,7 @@ contract AdaptiveMCREngine is IAdaptiveMCR, AccessControl, Pausable {
     uint256 public constant MAX_DELTA  = 5e16;    // ±5pp per epoch
     uint256 public constant DECREASE_COOLDOWN  = 4 hours;
     uint256 public constant CIRCUIT_BREAKER_WINDOW    = 12 hours;
-    uint256 public constant CIRCUIT_BREAKER_THRESHOLD = 10e16; // 10% drop
+    uint256 public constant CIRCUIT_BREAKER_THRESHOLD = 15e16; // 15% drop
     uint256 public constant CIRCUIT_BREAKER_HOLD      = 48 hours;
 
     // ─── Regime Config (DAO-adjustable) ──────────────────────────────────────
@@ -316,7 +316,7 @@ contract AdaptiveMCREngine is IAdaptiveMCR, AccessControl, Pausable {
             return;
         }
 
-        // Refresh the 12-hour window reference
+        // Refresh the window reference
         if (block.timestamp - lastPriceCheckAt >= CIRCUIT_BREAKER_WINDOW) {
             lastRecordedPrice = currentPriceBPS;
             lastPriceCheckAt  = block.timestamp;

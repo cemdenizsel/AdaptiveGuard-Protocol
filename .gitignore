@@ -11,13 +11,19 @@ test_results.json
 figures/
 code/
 
-# ── Hackathon brief (internal) ────────────────────────────────────────────────
-mezo_hackathon_project_brief.md
 
 # ── Environment / secrets ─────────────────────────────────────────────────────
 .env
 .env.local
+.env.testnet
 *.env.local
+frontend/.env.local
+
+# ── Internal / hackathon docs ─────────────────────────────────────────────────
+mezo_hackathon_project_brief.md
+mezo_alignment_analysis.md
+slides_prompt.md
+Mezo\ Testnet\ Deployment\ Reference\ for\ MUSD\ Hackathon\ Integration.md
 
 # ── Foundry ───────────────────────────────────────────────────────────────────
 contracts/out/

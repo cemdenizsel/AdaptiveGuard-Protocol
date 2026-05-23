@@ -29,15 +29,16 @@ sleep 1
 
 # ── 2. Deploy contracts ───────────────────────────────────────────────────
 echo "[2/4] Deploying contracts..."
+_KEY="${PRIVATE_KEY:-0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}"
 DEPLOY_OUT=$(
   cd contracts && \
-  PRIVATE_KEY="${PRIVATE_KEY:-0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}" \
+  DEPLOYER_KEY="$_KEY" \
   DAO_ADDRESS="${DAO_ADDRESS:-0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266}" \
   INIT_VOL_BPS=4500 \
   "$FORGE" script script/Deploy.s.sol \
     --rpc-url "http://127.0.0.1:$ANVIL_PORT" \
     --broadcast \
-    --private-key "${PRIVATE_KEY:-0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}" \
+    --private-key "$_KEY" \
     2>&1
 )
 echo "$DEPLOY_OUT"
@@ -80,9 +81,9 @@ echo ""
 echo "[3/4] Starting off-chain EGARCH service (dry-run)..."
 (
   cd "$REPO_ROOT" && \
-  pip install -q -r services/requirements.txt 2>/dev/null || true && \
+  uv sync -q && \
   set -a && source .env.local && set +a && \
-  python -m services.egarch_service.main --once --dry-run
+  uv run python -m services.egarch_service.main --once --dry-run
 ) &
 SERVICE_PID=$!
 

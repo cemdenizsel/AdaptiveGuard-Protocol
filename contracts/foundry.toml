@@ -14,7 +14,7 @@ remappings = [
 ]
 
 [rpc_endpoints]
-mezo_testnet = "${MEZO_TESTNET_RPC}"
+mezo_testnet = "https://rpc.test.mezo.org"
 anvil        = "http://127.0.0.1:8545"
 
 [etherscan]

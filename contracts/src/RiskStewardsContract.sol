@@ -42,6 +42,10 @@ interface IChainlinkAggregator {
         );
 }
 
+interface IMezoPriceFeed {
+    function fetchPrice() external returns (uint256);
+}
+
 contract RiskStewardsContract is AccessControl, Pausable, ReentrancyGuard {
 
     // ────────────────────────────────────────────────────────────────
@@ -108,7 +112,7 @@ contract RiskStewardsContract is AccessControl, Pausable, ReentrancyGuard {
     // ────────────────────────────────────────────────────────────────
     IChainlinkAggregator public rvFeed;    // Chainlink Realized Volatility
     IChainlinkAggregator public ivFeed;    // Deribit DVOL via Chainlink Functions
-    IChainlinkAggregator public priceFeed; // BTC/USD price feed
+    IMezoPriceFeed       public priceFeed; // Mezo BTC/USD price feed
 
     // ────────────────────────────────────────────────────────────────
     // Events
@@ -144,7 +148,7 @@ contract RiskStewardsContract is AccessControl, Pausable, ReentrancyGuard {
     ) {
         rvFeed = IChainlinkAggregator(_rvFeed);
         ivFeed = IChainlinkAggregator(_ivFeed);
-        priceFeed = IChainlinkAggregator(_priceFeed);
+        priceFeed = IMezoPriceFeed(_priceFeed);
 
         _grantRole(DEFAULT_ADMIN_ROLE, _dao);
         _grantRole(DAO_ROLE, _dao);
@@ -349,9 +353,8 @@ contract RiskStewardsContract is AccessControl, Pausable, ReentrancyGuard {
      * Pauses updates if any condition is triggered.
      */
     function _checkCircuitBreakers() internal {
-        (, int256 priceRaw, , uint256 priceUpdatedAt, ) = priceFeed.latestRoundData();
-        require(priceUpdatedAt > 0, "RSC: price feed error");
-        uint256 currentPrice = uint256(priceRaw);
+        uint256 currentPrice = priceFeed.fetchPrice();
+        require(currentPrice > 0, "RSC: price feed error");
 
         // Circuit breaker: price deviation >15% in one block
         if (prevBlockNumber > 0 && block.number > prevBlockNumber) {

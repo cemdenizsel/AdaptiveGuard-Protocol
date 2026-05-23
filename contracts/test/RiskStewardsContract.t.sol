@@ -15,7 +15,7 @@ import "../src/RiskStewardsContract.sol";
  *   (c) MEV sandwich attack exploiting predictable update schedules
  */
 
-// Mock Chainlink Aggregator
+// Mock Chainlink Aggregator (for rvFeed / ivFeed)
 contract MockAggregator is IChainlinkAggregator {
     int256 public answer;
     uint256 public updatedAt;
@@ -47,12 +47,29 @@ contract MockAggregator is IChainlinkAggregator {
     }
 }
 
+// Mock Mezo PriceFeed (for priceFeed — uses fetchPrice() not latestRoundData())
+contract MockMezoPriceFeed {
+    uint256 public price;
+
+    constructor(uint256 _price) {
+        price = _price;
+    }
+
+    function setPrice(uint256 _price) external {
+        price = _price;
+    }
+
+    function fetchPrice() external view returns (uint256) {
+        return price;
+    }
+}
+
 contract RiskStewardsContractTest is Test {
 
     RiskStewardsContract public rsc;
-    MockAggregator public rvFeed;
-    MockAggregator public ivFeed;
-    MockAggregator public priceFeed;
+    MockAggregator    public rvFeed;
+    MockAggregator    public ivFeed;
+    MockMezoPriceFeed public priceFeed;
 
     address dao = address(0xDA0);
     address steward = address(0x5000);
@@ -60,7 +77,7 @@ contract RiskStewardsContractTest is Test {
     address attacker = address(0xBAD);
     address user = address(0xABCD);
 
-    uint256 constant INITIAL_BTC_PRICE = 30000e8; // $30,000 in 8-decimal Chainlink format
+    uint256 constant INITIAL_BTC_PRICE = 30_000e18; // $30,000 in 1e18 (Mezo/Liquity format)
     uint256 constant RV_45PCT = 4500;    // 45% in BPS
     uint256 constant IV_50PCT = 5000;    // 50% in BPS
 
@@ -68,9 +85,9 @@ contract RiskStewardsContractTest is Test {
         vm.warp(1_700_000_000);
         vm.roll(1_000_000);
 
-        rvFeed = new MockAggregator(int256(RV_45PCT));
-        ivFeed = new MockAggregator(int256(IV_50PCT));
-        priceFeed = new MockAggregator(int256(INITIAL_BTC_PRICE));
+        rvFeed    = new MockAggregator(int256(RV_45PCT));
+        ivFeed    = new MockAggregator(int256(IV_50PCT));
+        priceFeed = new MockMezoPriceFeed(INITIAL_BTC_PRICE);
 
         rsc = new RiskStewardsContract(
             address(rvFeed),
@@ -261,7 +278,7 @@ contract RiskStewardsContractTest is Test {
         // Now simulate big price crash in next block
         vm.roll(block.number + 1);
         uint256 crashPrice = INITIAL_BTC_PRICE * 80 / 100; // -20%
-        priceFeed.setAnswer(int256(crashPrice));
+        priceFeed.setPrice(crashPrice);
 
         // Refresh oracle so stale check passes; circuit breaker fires afterward
         rvFeed.setAnswer(int256(RV_45PCT));
