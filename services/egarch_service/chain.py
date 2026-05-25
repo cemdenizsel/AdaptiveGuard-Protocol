@@ -1,14 +1,11 @@
 """
 Thin web3.py wrapper for interacting with deployed contracts.
-Loads ABI from Foundry's out/ directory automatically.
+ABIs are hardcoded (only the functions the service actually calls).
 """
 
 from __future__ import annotations
 
-import json
 import logging
-from pathlib import Path
-from typing import Any
 
 from web3 import Web3
 from web3.middleware import ExtraDataToPOAMiddleware
@@ -17,17 +14,36 @@ from . import config
 
 logger = logging.getLogger(__name__)
 
+_ORACLE_ABI = [
+    {"name": "submitVolatility", "type": "function", "stateMutability": "nonpayable",
+     "inputs": [{"name": "volBPS", "type": "uint256"}], "outputs": []},
+    {"name": "isHealthy", "type": "function", "stateMutability": "view",
+     "inputs": [], "outputs": [{"type": "bool"}]},
+    {"name": "smoothedVolBPS", "type": "function", "stateMutability": "view",
+     "inputs": [], "outputs": [{"type": "uint256"}]},
+]
 
-def _load_abi(contract_name: str) -> list[dict]:
-    """Load ABI from Foundry build output."""
-    abi_path = config.OUT_DIR / f"{contract_name}.sol" / f"{contract_name}.json"
-    if not abi_path.exists():
-        raise FileNotFoundError(
-            f"ABI not found at {abi_path}. Run `forge build` first."
-        )
-    with open(abi_path) as f:
-        artifact = json.load(f)
-    return artifact["abi"]
+_ENGINE_ABI = [
+    {"name": "hasPending", "type": "function", "stateMutability": "view",
+     "inputs": [], "outputs": [{"type": "bool"}]},
+    {"name": "currentMCR", "type": "function", "stateMutability": "view",
+     "inputs": [], "outputs": [{"type": "uint256"}]},
+    {"name": "proposeMCRUpdate", "type": "function", "stateMutability": "nonpayable",
+     "inputs": [{"name": "spDepthBPS", "type": "uint256"},
+                {"name": "tcrBPS", "type": "uint256"},
+                {"name": "btcPrice", "type": "uint256"}], "outputs": []},
+    {"name": "applyPendingProposal", "type": "function", "stateMutability": "nonpayable",
+     "inputs": [], "outputs": []},
+]
+
+_ADAPTER_ABI = [
+    {"name": "setSimulatedBTCPrice", "type": "function", "stateMutability": "nonpayable",
+     "inputs": [{"name": "price", "type": "uint256"}], "outputs": []},
+    {"name": "getSystemStats", "type": "function", "stateMutability": "view",
+     "inputs": [], "outputs": [{"name": "tcrBPS", "type": "uint256"},
+                                {"name": "spDepthBPS", "type": "uint256"},
+                                {"name": "btcPriceBPS", "type": "uint256"}]},
+]
 
 
 def connect() -> Web3:
@@ -35,28 +51,28 @@ def connect() -> Web3:
     w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
     if not w3.is_connected():
         raise ConnectionError(f"Cannot connect to {config.RPC_URL}")
-    logger.info("Connected to chain %s (chainId=%s)", config.RPC_URL, w3.eth.chain_id)
+    logger.info("Connected to chain *** (chainId=%s)", w3.eth.chain_id)
     return w3
 
 
 def get_oracle(w3: Web3):
     return w3.eth.contract(
         address=Web3.to_checksum_address(config.ORACLE_ADDRESS),
-        abi=_load_abi("VolatilityOracle"),
+        abi=_ORACLE_ABI,
     )
 
 
 def get_engine(w3: Web3):
     return w3.eth.contract(
         address=Web3.to_checksum_address(config.ENGINE_ADDRESS),
-        abi=_load_abi("AdaptiveMCREngine"),
+        abi=_ENGINE_ABI,
     )
 
 
 def get_adapter(w3: Web3):
     return w3.eth.contract(
         address=Web3.to_checksum_address(config.ADAPTER_ADDRESS),
-        abi=_load_abi("MezoIntegrationAdapter"),
+        abi=_ADAPTER_ABI,
     )
 
 
