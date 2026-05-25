@@ -296,7 +296,6 @@ function LiveTroveUI({ sys }: { sys: ReturnType<typeof useSystemData> }) {
     const readProvider = getReadProvider();
     const withdrawWei = ethers.parseEther(withdrawAmt);
 
-    const newDebtMUSD = trove.debtMUSD + parseFloat(withdrawAmt);
     const newCollWei = ethers.parseEther(trove.collBTC.toString());
     const hints = await computeHints(readProvider, newCollWei, withdrawWei).catch(() => ({
       upper: ZERO_ADDR,
