@@ -1,0 +1,38 @@
+name: EGARCH Service
+
+on:
+  schedule:
+    - cron: "0 * * * *"   # every hour on the hour
+  workflow_dispatch:        # also allows manual trigger from GitHub UI
+
+jobs:
+  run-egarch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run EGARCH cycle
+        env:
+          RPC_URL: ${{ secrets.RPC_URL }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          ORACLE_ADDRESS: ${{ secrets.ORACLE_ADDRESS }}
+          ENGINE_ADDRESS: ${{ secrets.ENGINE_ADDRESS }}
+          ADAPTER_ADDRESS: ${{ secrets.ADAPTER_ADDRESS }}
+          INIT_VOL_BPS: "4500"
+          EGARCH_WINDOW_HOURS: "720"
+          EGARCH_EMA_ALPHA: "0.1"
+        run: uv run python -m services.egarch_service.main --once
