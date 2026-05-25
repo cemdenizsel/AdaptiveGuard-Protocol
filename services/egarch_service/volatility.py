@@ -9,19 +9,12 @@ service can predict what the smoothed value will be after submission).
 
 from __future__ import annotations
 
-import sys
 import logging
-from pathlib import Path
 
 import numpy as np
 
-# Make code/ importable when running from services/
-_code_path = Path(__file__).resolve().parents[2] / "code"
-if str(_code_path) not in sys.path:
-    sys.path.insert(0, str(_code_path))
-
-from models.egarch_estimator import EGARCHEstimator, EWMAEstimator  # noqa: E402
-from . import config  # noqa: E402
+from .egarch_estimator import EGARCHEstimator, EWMAEstimator
+from . import config
 
 logger = logging.getLogger(__name__)
 

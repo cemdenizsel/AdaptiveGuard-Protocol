@@ -145,10 +145,12 @@ function LiveTroveUI({ sys }: { sys: ReturnType<typeof useSystemData> }) {
   const mcr = Number(sys.mcr) / 1e18;
   const btcPrice = sys.btcPriceUSD;
 
-  // CR preview for open trove form
+  // CR preview — must use total debt (borrow + ~0.5% fee + 200 gas comp) to match contract
   const collUSD = parseFloat(coll || "0") * btcPrice;
   const debtNum = parseFloat(debt || "0");
-  const crPreview = debtNum > 0 ? (collUSD / debtNum) * 100 : Infinity;
+  const estimatedFee = debtNum * 0.005;
+  const totalDebtPreview = debtNum + estimatedFee + 200;
+  const crPreview = totalDebtPreview > 0 ? (collUSD / totalDebtPreview) * 100 : Infinity;
   const crColor =
     crPreview < mcr * 100 ? "text-red-400" : crPreview < mcr * 115 ? "text-yellow-400" : "text-green-400";
 
@@ -208,7 +210,17 @@ function LiveTroveUI({ sys }: { sys: ReturnType<typeof useSystemData> }) {
       try {
         const tx = await fn();
         setTxHash(tx.hash);
-        await tx.wait();
+        try {
+          await tx.wait();
+        } catch (waitErr: any) {
+          // Mezo testnet RPC sometimes times out on receipt polling (HTTP 408).
+          // The tx likely confirmed — refresh state and let the user verify on explorer.
+          if (waitErr?.error?.data?.httpStatus === 408 || waitErr?.message?.includes("408")) {
+            await fetchTroveData();
+            return;
+          }
+          throw waitErr;
+        }
         await fetchTroveData();
       } catch (e: any) {
         setError(e.reason ?? e.message ?? "Transaction failed");
@@ -221,9 +233,13 @@ function LiveTroveUI({ sys }: { sys: ReturnType<typeof useSystemData> }) {
 
   const handleOpenTrove = useCallback(async () => {
     const signer = await getSigner();
-    const collWei = ethers.parseEther(coll);
-    const musdWei = ethers.parseEther(debt);
+    const collWei = ethers.parseEther(coll || "0");
+    const musdWei = ethers.parseEther(debt || "0");
 
+    if (collWei === 0n) {
+      setError("Enter a BTC collateral amount greater than 0.");
+      return;
+    }
     if (musdWei < MIN_MUSD_BORROW) {
       setError(`Minimum borrow is 1800 MUSD. You entered ${debt} MUSD.`);
       return;
@@ -561,7 +577,7 @@ function LiveTroveUI({ sys }: { sys: ReturnType<typeof useSystemData> }) {
 
           {/* CR preview */}
           <div className="bg-gray-800 rounded-lg px-4 py-3 flex items-center justify-between">
-            <span className="text-sm text-gray-400">Projected CR</span>
+            <span className="text-sm text-gray-400">Real ICR (incl. fee + gas comp)</span>
             <span className={`text-lg font-bold font-mono ${crColor}`}>
               {isFinite(crPreview) ? `${crPreview.toFixed(1)}%` : "∞"}
             </span>
