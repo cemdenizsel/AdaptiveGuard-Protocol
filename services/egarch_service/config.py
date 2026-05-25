@@ -7,7 +7,8 @@ from pathlib import Path
 # ── Chain / RPC ────────────────────────────────────────────────────────────────
 RPC_URL          = os.getenv("RPC_URL", "http://127.0.0.1:8545")
 CHAIN_ID         = int(os.getenv("CHAIN_ID", "31337"))   # 31337 = Anvil
-PRIVATE_KEY      = os.getenv("PRIVATE_KEY", "")           # Deployer / service key
+_raw_key         = os.getenv("PRIVATE_KEY", "")
+PRIVATE_KEY      = _raw_key if _raw_key.startswith("0x") else f"0x{_raw_key}" if _raw_key else ""
 
 # ── Contract Addresses (populated after deployment) ───────────────────────────
 ORACLE_ADDRESS   = os.getenv("ORACLE_ADDRESS",  "")

@@ -2,7 +2,19 @@
 
 > EGARCH(1,1)-driven adaptive Minimum Collateral Ratio (MCR) for MUSD — Mezo Hackathon 2025 (Bitcoin Track)
 
-AdaptiveGuard replaces the static 110% MCR used in most Bitcoin-backed stablecoin systems with a volatility-responsive ratio that rises ahead of market crashes and relaxes during calm periods. The result: fewer liquidation cascades, a deeper Stability Pool, and a more resilient peg.
+AdaptiveGuard replaces the static 110% MCR used in Bitcoin-backed stablecoin systems with a volatility-responsive ratio that rises ahead of market crashes and relaxes during calm periods. The result: fewer liquidation cascades, a deeper Stability Pool, and a more resilient peg.
+
+**Live on Mezo Testnet (chain 31611)** — contracts are deployed and running. No deployment needed to test.
+
+---
+
+## Live Deployed Contracts
+
+| Contract | Address | Explorer |
+|---|---|---|
+| VolatilityOracle | `0xe3896186c616675E6cc527539001342Fae0Bb9B5` | [view](https://explorer.test.mezo.org/address/0xe3896186c616675E6cc527539001342Fae0Bb9B5) |
+| AdaptiveMCREngine | `0x3D03ba16776C69d23452397bfc841824a06EF691` | [view](https://explorer.test.mezo.org/address/0x3D03ba16776C69d23452397bfc841824a06EF691) |
+| MezoIntegrationAdapter | `0x112B2F5135CE6C8BaF83571971171b2Af0B752Bc` | [view](https://explorer.test.mezo.org/address/0x112B2F5135CE6C8BaF83571971171b2Af0B752Bc) |
 
 ---
 
@@ -10,143 +22,199 @@ AdaptiveGuard replaces the static 110% MCR used in most Bitcoin-backed stablecoi
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Off-chain EGARCH service (Python)                       │
-│  ┌──────────────────────┐                               │
-│  │ EGARCH(1,1) estimator │  → submitVolatility()        │
-│  └──────────────────────┘          │                    │
-└─────────────────────────────────────┼───────────────────┘
-                                      ▼
+│  Off-chain EGARCH service (Python, runs every hour)      │
+│  • Fetches BTC price history from CoinGecko              │
+│  • Fits EGARCH(1,1) → annualized vol in BPS              │
+│  • Submits vol to VolatilityOracle                       │
+│  • Pushes BTC price to MezoIntegrationAdapter            │
+│  • Proposes MCR update to AdaptiveMCREngine              │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│  On-chain (Solidity / Foundry)                           │
+│  On-chain (Solidity, Mezo testnet)                       │
 │                                                          │
 │  VolatilityOracle ──────────► AdaptiveMCREngine          │
 │  • EMA smoothing (α=0.1)      • Four-regime MCR mapping  │
-│  • Chainlink RV / DVOL feeds  • ±5pp rate limiter        │
-│  • Outlier rejection          • 4h decrease cooldown     │
+│  • Outlier rejection          • ±5pp rate limiter        │
+│                               • 4h decrease cooldown     │
 │                               • 12h circuit breaker      │
 │                               • 1h challenge window      │
 │                                      │                   │
 │                        MezoIntegrationAdapter            │
-│                        • Simulated CDP system            │
-│                        • Batch liquidation               │
-│                        • Position health checks          │
+│                        • Reads live TCR from TroveManager│
+│                        • Reads live SP depth from SP     │
+│                        • Bridges AdaptiveGuard ↔ Mezo   │
 └─────────────────────────────────────────────────────────┘
-                                      ▲
-┌─────────────────────────────────────┼───────────────────┐
-│  React Dashboard (Vite + Tailwind)   │                   │
-│  • Live MCR / vol display            │                   │
-│  • CDP Manager (open / close troves) │                   │
-│  • Stress test simulator             │                   │
+                          ▲
+┌─────────────────────────────────────────────────────────┐
+│  React Dashboard (Vite + Tailwind + ethers.js)           │
+│  • Live MCR / vol / TCR / SP depth display               │
+│  • CDP Manager — open real troves, mint testnet MUSD     │
+│  • Calls Mezo BorrowerOperations directly from wallet    │
+│  • Adaptive MCR enforced at the UI level                 │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ## MCR Mapping (Four Regimes)
 
-| Annualized Vol | Base MCR         |
-|---------------|-----------------|
-| < 30%          | 110%             |
-| 30–60%         | 110% → 125% (linear) |
-| 60–90%         | 125% → 140% (linear) |
-| ≥ 90%          | 140% → 160% (linear) |
+| Annualized Vol | MCR |
+|---|---|
+| < 30% | 110% |
+| 30–60% | linear 110% → 125% |
+| 60–90% | linear 125% → 140% |
+| ≥ 90% | 140% → 160% |
 
 Composite adjustments on top:
-- **Stability Pool depth** < 10% → +5pp; < 20% → +2pp
+- **SP depth** < 10% → +5pp; < 20% → +2pp
 - **TCR near CCR (150%)** → up to +10pp
 - **Rate limiter**: ±5pp per epoch, 4h cooldown between decreases
-- **Circuit breaker**: >15% price drop in 12h → freeze MCR for 48h
+- **Circuit breaker**: >15% BTC drop in 12h → freeze MCR for 48h
 
 ---
 
-## Quickstart (Local Demo)
+## Prerequisites
 
-### Prerequisites
 - [Foundry](https://book.getfoundry.sh/getting-started/installation)
 - Node 18+ / npm
 - Python 3.10+
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
-
-```bash
-# 1. Clone
-git clone <this-repo> && cd AdaptiveGuard-Protocol
-
-# 2. Install Foundry dependencies
-cd contracts && forge install && cd ..
-
-# 3. Install frontend dependencies
-cd frontend && npm install && cd ..
-
-# 4. One-command local demo (uv handles Python deps automatically)
-./scripts/run_local.sh
-```
-
-The script:
-1. Starts a local Anvil chain
-2. Deploys all 3 contracts
-3. Writes addresses to `.env.local` and `frontend/.env.local`
-4. Runs a dry-run of the EGARCH service
-5. Launches the React dashboard at **http://localhost:5173**
+- MetaMask (for testnet UI)
 
 ---
 
-## Manual Workflow
+## Quickstart — Mezo Testnet (recommended)
 
-### Deploy
+Contracts are already deployed. You only need a wallet with testnet BTC.
+
+**1. Add Mezo Testnet to MetaMask**
+
+| Field | Value |
+|---|---|
+| Network name | Mezo Testnet |
+| RPC URL | `https://rpc.test.mezo.org` |
+| Chain ID | `31611` |
+| Currency symbol | `BTC` |
+| Block explorer | `https://explorer.test.mezo.org` |
+
+**2. Get testnet BTC**
+
+Visit [faucet.test.mezo.org](https://faucet.test.mezo.org) and request testnet BTC for your wallet.
+
+**3. Configure environment**
 
 ```bash
-cd contracts
-
-# Copy and configure
-cp ../.env.example ../.env
-# Edit .env: set PRIVATE_KEY, DAO_ADDRESS
-
-# Deploy to Anvil
-forge script script/Deploy.s.sol --rpc-url anvil --broadcast
-
-# Deploy to Mezo testnet
-forge script script/Deploy.s.sol \
-  --rpc-url mezo_testnet \
-  --broadcast \
-  --verify \
-  --private-key $PRIVATE_KEY
+cp .env.testnet.example .env.testnet
+# Edit .env.testnet — fill in PRIVATE_KEY and DAO_ADDRESS with your wallet
+# All contract addresses are pre-filled and ready to use
 ```
+
+**4. Install dependencies**
+
+```bash
+# Frontend
+cd frontend && npm install && cd ..
+
+# Python (uv handles this automatically on first run)
+uv sync
+```
+
+**5. Run**
+
+```bash
+# Start UI + EGARCH dry-run (no transactions)
+./scripts/run_testnet.sh --dry-run
+
+# Start UI + live EGARCH service (submits vol every hour)
+./scripts/run_testnet.sh
+```
+
+Open **http://localhost:5173** — navigate to CDP Manager to open a real trove and mint testnet MUSD.
+
+---
+
+## Quickstart — Local Demo (Anvil)
+
+No testnet BTC needed. Uses a local chain with simulated positions.
+
+```bash
+# Install Foundry deps
+cd contracts && forge install && forge build && cd ..
+
+# Install frontend deps
+cd frontend && npm install && cd ..
+
+# One command: starts Anvil, deploys contracts, runs EGARCH dry-run, opens UI
+./scripts/run_local.sh
+```
+
+Open **http://localhost:5173**.
+
+---
+
+## Manual Workflows
 
 ### Run Tests
 
 ```bash
 cd contracts
-forge test -v          # all 92 tests
-forge test --summary   # summary table
+forge test -v         # all tests with output
+forge test --summary  # pass/fail table
 ```
 
-### Run EGARCH Service
+### Deploy Contracts (only needed if redeploying)
 
 ```bash
-# Install Python dependencies
-uv sync
+cd contracts
 
-# Set env vars first
-export ORACLE_ADDRESS=0x...
-export ENGINE_ADDRESS=0x...
-export PRIVATE_KEY=0x...
-export RPC_URL=http://127.0.0.1:8545
+# To Mezo testnet
+forge script script/Deploy.s.sol \
+  --rpc-url https://rpc.test.mezo.org \
+  --broadcast \
+  --private-key 0x<your_key>
 
-# Dry run (no transactions)
+# Redeploy adapter only (wires live Mezo contracts)
+forge script script/DeployAdapter.s.sol \
+  --rpc-url https://rpc.test.mezo.org \
+  --broadcast \
+  --private-key 0x<your_key>
+```
+
+### Run EGARCH Service Manually
+
+```bash
+# Single cycle, no transactions
 uv run python -m services.egarch_service.main --dry-run --once
 
-# Start scheduler (runs every hour)
+# Single live cycle (sends transactions)
+source .env.testnet && PRIVATE_KEY="0x${PRIVATE_KEY}" \
+  uv run python -m services.egarch_service.main --once
+
+# Continuous (every hour)
 uv run python -m services.egarch_service.main
 ```
 
-### Run Frontend
+### Run Frontend Only
 
 ```bash
-cp frontend/.env.example frontend/.env.local
-# Fill in contract addresses
-
 cd frontend
-npm run dev     # dev server at http://localhost:5173
-npm run build   # production build
+npm run dev    # http://localhost:5173
+npm run build  # production build → dist/
 ```
+
+---
+
+## How Real MUSD Minting Works
+
+The CDP Manager connects directly to Mezo's `BorrowerOperations` contract from the user's wallet. The flow:
+
+1. User enters BTC collateral amount and MUSD to borrow
+2. Frontend computes sorted-list hints via `HintHelpers` + `SortedTroves`
+3. User's wallet calls `BorrowerOperations.openTrove(maxFee, musdAmount, upperHint, lowerHint)` with BTC as `msg.value`
+4. Mezo protocol mints MUSD directly to the user's wallet
+5. AdaptiveGuard reads the resulting TCR and SP depth to inform the next MCR proposal
+
+Minimum: **1800 MUSD** borrowed (Mezo adds 200 MUSD gas compensation automatically).
 
 ---
 
@@ -154,28 +222,31 @@ npm run build   # production build
 
 | Contract | Description |
 |---|---|
-| `VolatilityOracle.sol` | Accepts EGARCH vol submissions, applies EMA, validates vs Chainlink feeds |
-| `AdaptiveMCREngine.sol` | Computes composite MCR, enforces rate limits, optimistic proposal/challenge |
-| `MezoIntegrationAdapter.sol` | Simulated CDP system for demo; production path delegates to live Mezo contracts |
-| `RiskStewardsContract.sol` | Alternative governance implementation with packed regime storage |
+| `VolatilityOracle.sol` | Accepts EGARCH vol submissions, applies EMA smoothing (α=0.1), supports optional Chainlink RV/DVOL validation |
+| `AdaptiveMCREngine.sol` | Maps smoothed vol to MCR regime, enforces rate limiter + circuit breaker, optimistic 1h challenge window |
+| `MezoIntegrationAdapter.sol` | Reads live TCR/SP from Mezo TroveManager/StabilityPool; caches BTC price; bridges AdaptiveGuard ↔ Mezo |
+| `RiskStewardsContract.sol` | Alternative governance implementation with packed regime storage and steward voting |
 
 ---
 
-## Test Coverage (92 tests, 0 failures)
+## Test Coverage
 
 ```
-AdaptiveMCREngineTest      27/27  ✓
-MezoIntegrationAdapterTest 16/16  ✓
-RiskStewardsContractTest   32/32  ✓
-VolatilityOracleTest       17/17  ✓
+AdaptiveMCREngineTest         ✓
+MezoIntegrationAdapterTest    ✓
+RiskStewardsContractTest      ✓
+VolatilityOracleTest          ✓
 ```
+
+Run `forge test --summary` for the full pass/fail table.
 
 ---
 
 ## Research
 
 The volatility model and protocol design are documented in `paper_draft.pdf`.
-Key findings from the backtester:
-- During Black Thursday (−51.6% drawdown): bad debt reduced 72.6%, cascade depth reduced 59.1% vs static baseline
-- During May 2021 (−48.0% drawdown): bad debt reduced 67.6%, cascade depth reduced 58.3%
-- During FTX collapse (−27.1% drawdown): bad debt eliminated entirely (100% reduction), cascade depth reduced 80.0%
+
+Key backtesting results vs static 110% MCR baseline:
+- **Black Thursday** (−51.6% drawdown): bad debt −72.6%, cascade depth −59.1%
+- **May 2021** (−48.0% drawdown): bad debt −67.6%, cascade depth −58.3%
+- **FTX collapse** (−27.1% drawdown): bad debt eliminated entirely (−100%), cascade depth −80.0%

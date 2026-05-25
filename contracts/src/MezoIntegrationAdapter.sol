@@ -6,6 +6,11 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./interfaces/IAdaptiveMCR.sol";
 import "./interfaces/IMezoCDP.sol";
+import "./interfaces/IBorrowerOperations.sol";
+import "./interfaces/ITroveManager.sol";
+import "./interfaces/IStabilityPool.sol";
+import "./interfaces/IHintHelpers.sol";
+import "./interfaces/ISortedTroves.sol";
 
 /**
  * @title MezoIntegrationAdapter
@@ -39,6 +44,12 @@ contract MezoIntegrationAdapter is AccessControl, Pausable, ReentrancyGuard {
     IMezoPriceFeed public mezoPriceFeed;   // Mezo BTC/USD price feed (optional)
 
     bool public isSimulated;  // true = demo/testnet mode with local CDP tracking
+
+    // ─── Live Mezo contract references (set via setMezoContracts) ─────────────
+    ITroveManager  public troveManager;
+    IStabilityPool public stabilityPool;
+    IHintHelpers   public hintHelpers;
+    ISortedTroves  public sortedTroves;
 
     // ─── Simulated CDP Storage (used when isSimulated = true) ─────────────────
     struct SimulatedTrove {
@@ -82,6 +93,10 @@ contract MezoIntegrationAdapter is AccessControl, Pausable, ReentrancyGuard {
         // Reasonable testnet defaults
         simulatedBTCPrice  = 30_000e18;
         simulatedSPBalance = 1_500_000e18;  // 1.5M MUSD
+    }
+
+    function isLive() public view returns (bool) {
+        return address(troveManager) != address(0);
     }
 
     // ─── Position Health ──────────────────────────────────────────────────────
@@ -149,18 +164,17 @@ contract MezoIntegrationAdapter is AccessControl, Pausable, ReentrancyGuard {
         view
         returns (uint256 tcrBPS, uint256 spDepthBPS, uint256 btcPriceBPS)
     {
-        if (isSimulated) {
-            return _simulatedStats();
+        if (isLive()) {
+            uint256 price = simulatedBTCPrice; // cached; update via updateBTCPrice() or setSimulatedBTCPrice()
+            uint256 tcr  = troveManager.getTCR(price);
+            uint256 debt = troveManager.getEntireSystemDebt();
+            uint256 spBal = stabilityPool.getTotalMUSDDeposits();
+            tcrBPS      = tcr * 10000 / PRECISION;
+            spDepthBPS  = debt > 0 ? spBal * 10000 / debt : 10000;
+            btcPriceBPS = price / 1e18;
+            return (tcrBPS, spDepthBPS, btcPriceBPS);
         }
-
-        uint256 price = _getPrice();
-        uint256 tcr = mezoCDP.getTCR(price);
-        uint256 spBal = mezoCDP.getStabilityPoolBalance();
-        uint256 debt  = mezoCDP.getTotalDebt();
-
-        tcrBPS      = tcr * 10000 / PRECISION;         // 1e18 → BPS
-        spDepthBPS  = debt > 0 ? spBal * 10000 / debt : 10000;
-        btcPriceBPS = price / 1e18;                    // 1e18 precision → raw USD integer
+        return _simulatedStats();
     }
 
     function _simulatedStats() internal view returns (uint256 tcrBPS, uint256 spDepthBPS, uint256 btcPriceBPS) {
@@ -329,6 +343,38 @@ contract MezoIntegrationAdapter is AccessControl, Pausable, ReentrancyGuard {
         mezoPriceFeed = IMezoPriceFeed(_feed);
     }
 
+    function setMezoContracts(
+        address _troveManager,
+        address _stabilityPool,
+        address _hintHelpers,
+        address _sortedTroves,
+        address _priceFeed
+    ) external onlyRole(DAO_ROLE) {
+        troveManager  = ITroveManager(_troveManager);
+        stabilityPool = IStabilityPool(_stabilityPool);
+        hintHelpers   = IHintHelpers(_hintHelpers);
+        sortedTroves  = ISortedTroves(_sortedTroves);
+        if (_priceFeed != address(0)) {
+            mezoPriceFeed = IMezoPriceFeed(_priceFeed);
+        }
+    }
+
+    function getMezoPrice() external view returns (uint256) {
+        return simulatedBTCPrice;
+    }
+
+    function getRealTrove(address owner) external view returns (
+        uint256 coll, uint256 debt, uint256 status, uint256 icr
+    ) {
+        require(isLive(), "Adapter: not in live mode");
+        coll   = troveManager.getTroveColl(owner);
+        debt   = troveManager.getTroveDebt(owner);
+        status = troveManager.getTroveStatus(owner);
+        icr    = simulatedBTCPrice > 0
+            ? troveManager.getCurrentICR(owner, simulatedBTCPrice)
+            : 0;
+    }
+
     /**
      * @notice Pull the current BTC price from Mezo's PriceFeed and store it.
      * Anyone can call this to keep simulatedBTCPrice fresh on testnet.
@@ -375,18 +421,21 @@ contract MezoIntegrationAdapter is AccessControl, Pausable, ReentrancyGuard {
         view
         returns (uint256 collUSD, uint256 debtUSD)
     {
-        if (isSimulated) {
-            SimulatedTrove storage t = simulatedTroves[owner];
-            if (!t.active) return (0, 0);
-            collUSD = t.collateralBTC18 * simulatedBTCPrice / 1e18;
-            debtUSD = t.debtMUSD18;
-        } else {
-            IMezoCDP.TroveData memory td = mezoCDP.getTrove(owner);
-            if (td.status != 1) return (0, 0);
-            uint256 price = _getPrice();
-            collUSD = td.collateral * price / 1e18; // Mezo 18-dec
-            debtUSD = td.debt;
+        if (isLive()) {
+            uint256 status = troveManager.getTroveStatus(owner);
+            if (status != 1) return (0, 0); // not active
+            uint256 coll  = troveManager.getTroveColl(owner);
+            uint256 debt  = troveManager.getTroveDebt(owner);
+            uint256 price = simulatedBTCPrice;
+            collUSD = coll * price / 1e18;
+            debtUSD = debt;
+            return (collUSD, debtUSD);
         }
+        // Simulated mode
+        SimulatedTrove storage t = simulatedTroves[owner];
+        if (!t.active) return (0, 0);
+        collUSD = t.collateralBTC18 * simulatedBTCPrice / 1e18;
+        debtUSD = t.debtMUSD18;
     }
 
     function _getPrice() internal view returns (uint256) {

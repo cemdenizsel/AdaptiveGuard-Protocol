@@ -81,11 +81,18 @@ def run_cycle(dry_run: bool = False) -> dict:
     status["oracle_tx"] = tx
     logger.info("Oracle updated: %s", tx)
 
-    # ── 5. Get system stats ───────────────────────────────────────────────────
+    # ── 5. Push current BTC price to adapter cache, then read system stats ──────
     sp_depth_bps = config.STATIC_SP_DEPTH_BPS
     tcr_bps      = config.STATIC_TCR_BPS
 
     if adapter is not None:
+        try:
+            btc_price_1e18 = int(btc_price) * 10 ** 18
+            send_tx(w3, adapter.functions.setSimulatedBTCPrice(btc_price_1e18))
+            logger.info("Updated adapter BTC price: $%s (1e18=%d)", btc_price, btc_price_1e18)
+        except Exception as exc:
+            logger.warning("Could not update adapter BTC price (%s); continuing", exc)
+
         try:
             tcr_bps, sp_depth_bps, _ = adapter.functions.getSystemStats().call()
             logger.info("Live stats — TCR: %d BPS, SP depth: %d BPS", tcr_bps, sp_depth_bps)

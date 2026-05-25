@@ -30,7 +30,7 @@ missing=()
 [[ -z "${PRIVATE_KEY:-}"    ]] && missing+=("PRIVATE_KEY")
 [[ -z "${ORACLE_ADDRESS:-}" ]] && missing+=("ORACLE_ADDRESS")
 [[ -z "${ENGINE_ADDRESS:-}" ]] && missing+=("ENGINE_ADDRESS")
-[[ -z "${ADAPTER_ADDRESS:-}"]] && missing+=("ADAPTER_ADDRESS")
+[[ -z "${ADAPTER_ADDRESS:-}" ]] && missing+=("ADAPTER_ADDRESS")
 
 if [[ ${#missing[@]} -gt 0 ]]; then
   echo "ERROR: Missing required values in .env.testnet:"
@@ -52,6 +52,8 @@ VITE_MUSD_ADDRESS=${MEZO_MUSD:-}
 VITE_BORROWER_OPERATIONS=${MEZO_BORROWER_OPERATIONS:-}
 VITE_TROVE_MANAGER=${MEZO_TROVE_MANAGER:-}
 VITE_PRICE_FEED=${MEZO_PRICE_FEED:-}
+VITE_HINT_HELPERS=${MEZO_HINT_HELPERS:-}
+VITE_SORTED_TROVES=${MEZO_SORTED_TROVES:-}
 EOF
 
 echo "=== AdaptiveGuard Testnet Mode ==="
