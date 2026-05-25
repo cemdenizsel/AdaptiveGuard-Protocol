@@ -98,10 +98,16 @@ function AdaptiveMCRBanner({ sys }: { sys: ReturnType<typeof useSystemData> }) {
       </div>
       <div className="flex items-end gap-6">
         <div>
-          <p className="text-xs text-gray-500 mb-0.5">Current Adaptive MCR</p>
-          <p className={`text-4xl font-bold font-mono ${mcrColor}`}>{mcrPct}%</p>
+          <p className="text-xs text-gray-500 mb-0.5">
+            {sys.hasPending ? "AdaptiveGuard Target MCR" : "Current Adaptive MCR"}
+          </p>
+          <p className={`text-4xl font-bold font-mono ${sys.hasPending ? "text-blue-300" : mcrColor}`}>
+            {sys.hasPending ? `${(Number(sys.proposedMCR) / 1e18 * 100).toFixed(1)}%` : `${mcrPct}%`}
+          </p>
           <p className="text-xs text-gray-500 mt-1">
-            Minimum collateral ratio required by the protocol
+            {sys.hasPending
+              ? `Pending challenge window · Applied: ${mcrPct}%`
+              : "Minimum collateral ratio required by the protocol"}
           </p>
         </div>
         <div className="flex gap-6 text-sm pb-1">

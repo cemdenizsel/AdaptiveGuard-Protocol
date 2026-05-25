@@ -63,12 +63,26 @@ export function Dashboard() {
 
       {/* Key Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard
-          label="Current MCR"
-          value={`${mcrPct}%`}
-          sub="Minimum Collateral Ratio"
-          highlight={mcrHighlight}
-        />
+        {sys.hasPending ? (
+          <div className="bg-gray-900 border border-blue-700 rounded-xl p-5">
+            <p className="text-xs font-medium text-blue-400 uppercase tracking-wider mb-1">
+              AdaptiveGuard Target MCR
+            </p>
+            <p className="text-3xl font-bold tabular-nums text-blue-300">
+              {fmtMCR(sys.proposedMCR)}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Pending challenge window · Applied: {mcrPct}%
+            </p>
+          </div>
+        ) : (
+          <StatCard
+            label="Current MCR"
+            value={`${mcrPct}%`}
+            sub="Minimum Collateral Ratio"
+            highlight={mcrHighlight}
+          />
+        )}
         <StatCard
           label="EGARCH Vol (smoothed)"
           value={`${volPct}%`}
