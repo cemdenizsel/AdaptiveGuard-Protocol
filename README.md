@@ -2,7 +2,7 @@
 
 > EGARCH(1,1)-driven adaptive Minimum Collateral Ratio (MCR) for MUSD — Mezo Hackathon 2025 (Bitcoin Track)
 
-> **This implementation is the direct realization of a scientific research paper.** The volatility model, four-regime MCR mapping, composite risk adjustments, and backtesting methodology are all formally documented in [`paper_draft.pdf`](paper_draft.pdf) in this repository. Every design decision in the code — the EGARCH(1,1) estimator, the EMA smoothing with α=0.1, the ±5pp rate limiter, the 15%/12h circuit breaker trigger — derives from the model described in the paper. Read the paper first if you want to understand why the protocol is designed the way it is.
+> **This implementation is the direct realization of a scientific research paper.** The volatility model, four-regime MCR mapping, composite risk adjustments, and backtesting methodology are all formally documented in [`paper_draft.pdf`](mezo_docs/paper_draft.pdf) in this repository. Every design decision in the code — the EGARCH(1,1) estimator, the EMA smoothing with α=0.1, the ±5pp rate limiter, the 15%/12h circuit breaker trigger — derives from the model described in the paper. Read the paper first if you want to understand why the protocol is designed the way it is.
 
 AdaptiveGuard replaces the static 110% MCR used in Bitcoin-backed stablecoin systems with a volatility-responsive ratio that rises ahead of market crashes and relaxes during calm periods. The result: fewer liquidation cascades, a deeper Stability Pool, and a more resilient peg.
 
@@ -246,7 +246,7 @@ Run `forge test --summary` for the full pass/fail table.
 
 ## Research
 
-The volatility model and protocol design are documented in `paper_draft.pdf`.
+The volatility model and protocol design are documented in [`mezo_docs/paper_draft.pdf`](mezo_docs/paper_draft.pdf).
 
 Key backtesting results vs static 110% MCR baseline:
 - **Black Thursday** (−51.6% drawdown): bad debt −72.6%, cascade depth −59.1%
